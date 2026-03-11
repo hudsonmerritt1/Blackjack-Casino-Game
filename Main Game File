@@ -1,0 +1,256 @@
+import random
+
+#make deck
+suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'] #suits
+ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'] #ranks
+deck = [(rank + ' of ' + suit) for suit in suits for rank in ranks] #make cards
+
+#constants
+starting_bankroll = 1000 #starting money
+dealer_hand = [] #empty dealer hand for later
+
+#get players and their bets
+def get_players_bets():
+    print("Welcome to the Blackjack table!")  #greeting
+    num_players = int(input("How many players are there? "))  #get number of players
+    players_bets = []  #list for players and their values
+
+    for _ in range(num_players):  #loop for all players
+        name = input("What is your name? ")  #get player name
+        players_bets.append({ #add values to list
+            "name": name,
+            "bet": 0,  #initialize bet for each round
+            "hands": [[]],  #list of hands in case if split (starts with one hand)
+            "totals": [0],  #list of total for each hand
+            "bankroll": starting_bankroll,  #bankroll per player
+            "split": False  #see if a split happened oir not
+        })
+    return players_bets #return list
+
+#assign number values to cards
+def card_value(card):
+    rank = card.split(' ')[0] #split rank and suit to get the rank by itself
+    if rank in ['Jack', 'Queen', 'King']:  #face cards value is 10
+        return 10
+    elif rank == 'Ace':  #decide 1 or 11 for Ace value
+        while True: #loop the question
+            try:
+                ace_value = int(input("You drew an Ace! Do you want it to be worth 1 or 11? "))
+                if ace_value == 1 or ace_value == 11:
+                    return ace_value #return what the player chooses
+                else:
+                    print("Please enter either 1 or 11.") #error
+            except ValueError:
+                print("Invalid input. Please enter a number (1 or 11).") #error
+    else:
+        return int(rank) #return card rank as an integer
+
+#deal cards
+def deal_cards(players_bets):
+    for _ in range(2):  #repeat twice to deal 2 cards
+        for player in players_bets: #deal to all players in list
+            card = random.choice(deck)  #random card from the deck
+            deck.remove(card)  #remove card from deck
+            player['hands'][0].append(card)  #add card to player's hand in list
+            player['totals'][0] += card_value(card)  #update player's total in list
+            print(f"{player['name']} was dealt: {card}") #print name and what they were dealt
+            print(f"{player['name']}'s total so far: {player['totals'][0]}\n") #print total for player
+
+#deal first card to dealer
+def deal_dealer_card(dealer_hand):
+    card = random.choice(deck)  #deal one card to dealer
+    deck.remove(card)  #remove card from deck
+    dealer_hand.append(card)  #add to dealer's hand
+    print(f"Dealer was dealt: {card}") #display their first card
+
+    #this should determine if dealer gets 1 or 11 but i couldnt get it to work so we have to do it manually
+    if card.split(' ')[0] == 'Ace': #if ace
+        current_total = sum(card_value(c) for c in dealer_hand[:-1])  #finds current total of dealers hand without the most recent card which is supposed to be an ace
+        return 1 if current_total + 11 > 21 else 11  #return 1 if 11 would make the dealer bust
+    else:
+        return card_value(card)  #return value
+
+#insurance
+def insurance():
+    if dealer_hand[0].split(' ')[0] == 'Ace': #if dealers first card is an ace
+        insurance = input("The dealer drew an ace! Do you want to purchase insurance for this hand? (yes/no): ").lower() #determine if you want insurance
+
+#check for split opportunity
+def check_split(players_bets):
+    for player in players_bets: #check each player on list
+        if len(player['hands'][0]) == 2: #check if player has two cards
+            first_card_rank = player['hands'][0][0].split(' ')[0] #determine card ranks
+            second_card_rank = player['hands'][0][1].split(' ')[0]
+
+            if first_card_rank == second_card_rank: #if ranks are same, let player split
+                split_choice = input(f"{player['name']}, you have a pair of {first_card_rank}s. Do you want to split your hand? (yes/no): ").lower()
+
+                if split_choice == 'yes':
+                    player['split'] = True  #player deciedes to split make two hands in list
+                    new_hand = [player['hands'][0].pop()]  #move one card to new hand
+                    player['hands'].append(new_hand) #new hand
+                    player['totals'].append(card_value(new_hand[0]))  #update totals for new hand
+                    player['totals'][0] = card_value(player['hands'][0][0])  #update total for original hand
+
+                    #update the bets list to keep track of the split bets
+                    player['bets'] = [player['bet'], player['bet']]  #assign the same bet to both hands
+
+                    print(f"{player['name']} split their hand!") #display that they split
+                    print(f"Total for hand 1: {player['totals'][0]}") #hand 1
+                    print(f"Total for hand 2: {player['totals'][1]}") #hand 2
+
+#double down
+def double(players_bets):
+    for player in players_bets:  #loop for each player
+        if player['totals'][0] != 21:  #only ask if player doesn't have a blackjack
+            while True: #loop
+                double_down = input(f"{player['name']}, do you want to double your bet? (yes/no): ").lower() #ask if they want to double
+                if double_down == 'yes':
+                    if player['bet'] * 2 <= player['bankroll']:  #check if they have enough
+                        player['bankroll'] -= player['bet']  #deduct original bet amount
+                        player['bet'] *= 2  #double the bet
+                        print(f"{player['name']}'s bet has been doubled to: ${player['bet']}. Bankroll now: ${player['bankroll']}") #display new bet and bankroll
+                        break  #exit the loop after doubling the bet
+                    else:
+                        print(f"Bet cannot be more than your available bankroll of ${player['bankroll']}.") #cannot double bet if you dont have enoiugh
+                elif double_down == 'no':
+                    break  #exit the loop without doubling
+                else:
+                    print("Invalid input. Please enter 'yes' or 'no'.") #error
+
+#hit/stand/surrender
+def hit_stand_surrender(players_bets):
+    for player in players_bets: #loop for all players
+        for hand_index, hand in enumerate(player['hands']): #determine if split hand or not
+            if player['split']:
+                print(f"\nPlaying hand {hand_index + 1} for {player['name']}:") #split hands
+            else:
+                print(f"\nPlaying for {player['name']}:")  #normal hand
+            if player['totals'][hand_index] == 21:
+                print(f"Blackjack! {player['name']} wins hand {hand_index + 1}!" if player['split'] else f"Blackjack! {player['name']} wins!") #blackjack
+                continue
+
+            while True: #loop for each player
+                choice = input(f"{player['name']}, do you want to hit, stand, or surrender{' for hand ' + str(hand_index + 1) if player['split'] else ''}? (hit/stand/surrender): ").lower() #choose hit stand or surrender
+                if choice == 'hit': #if hit
+                    card = random.choice(deck) #random card
+                    deck.remove(card) #remove card from deck
+                    player['hands'][hand_index].append(card) #add to hand
+                    player['totals'][hand_index] += card_value(card) #add to total
+                    print(f"{player['name']} was dealt: {card}") #display what they were dealt
+                    print(f"Total{' for hand ' + str(hand_index + 1) if player['split'] else ''} is now: {player['totals'][hand_index]}\n") #display total 
+
+                    if player['totals'][hand_index] == 21: #blakcjack
+                        print(f"Blackjack! {player['name']} wins hand {hand_index + 1}!" if player['split'] else f"Blackjack! {player['name']} wins!")
+                        break
+                    elif player['totals'][hand_index] > 21: #bust
+                        print(f"Bust! {player['name']} lost hand {hand_index + 1} with a total of {player['totals'][hand_index]}." if player['split'] else f"Bust! {player['name']} lost with a total of {player['totals'][hand_index]}.")
+                        break
+
+                elif choice == 'stand': #do nothing
+                    print(f"{player['name']} stands with a total of {player['totals'][hand_index]}{' for hand ' + str(hand_index + 1) if player['split'] else ''}.\n") #display total at standing
+                    break
+
+                elif choice == 'surrender': #surrender
+                    half_bet = player['bet'] * 0.5 #get half of bet
+                    player['bankroll'] += half_bet #return half bet
+                    print(f"{player['name']} surrendered hand {hand_index + 1} and forfeits half their bet: ${half_bet}" if player['split'] else f"{player['name']} surrendered and forfeits half their bet: ${half_bet}") #display surrender message
+                    print(f"{player['name']}'s remaining bankroll is now: ${player['bankroll']}") #new bankroll
+                    break
+
+                else:
+                    print("Invalid input. Please enter 'hit', 'stand', or 'surrender'.") #error
+
+def dealer_play(dealer_hand):
+    dealer_total = sum(card_value(card) for card in dealer_hand) #dealer total
+    print(f"\nDealer's total is: {dealer_total}")
+
+    while dealer_total < 17:  #dealer must hit until they reach 17
+        card = random.choice(deck) #random card
+        deck.remove(card) #remove from deck
+        dealer_hand.append(card) #add to hand
+        dealer_total += card_value(card)#add up total
+        print(f"Dealer drew: {card}") #display card
+        print(f"Dealer's total is now: {dealer_total}") #display total
+
+    return dealer_total
+
+# Payouts
+def payout(players_bets, dealer_total):
+    for player in players_bets: #loop for all players
+        for hand_index, total in enumerate(player['totals']): #all totals
+            if total > 21: #bust
+                print(f"{player['name']} lost hand {hand_index + 1} (bust). Bet lost: ${player['bet']}")
+            elif dealer_total > 21 or total > dealer_total: #win
+                winnings = player['bet'] * 2  #winner gets double their bet
+                player['bankroll'] += winnings #add to bankroll
+                print(f"{player['name']} wins hand {hand_index + 1}! Payout: ${winnings}. New bankroll: ${player['bankroll']}") #display win and bankroll
+            elif total < dealer_total: #loss
+                print(f"{player['name']} lost hand {hand_index + 1}. Bet lost: ${player['bet']}") #display loss and how much
+            else: #push
+                player['bankroll'] += player['bet'] #give money back
+                print(f"{player['name']} pushed hand {hand_index + 1} (tie). Bet returned: ${player['bet']}. New bankroll: ${player['bankroll']}") #display push and bankroll
+            #handle split payouts
+            if player['split']:
+                print(f"{player['name']} will be paid out separately for each hand due to the split.") #display split payout
+
+#clear hands and totals for the next round
+def clear_hands_and_totals(players_bets):
+    for player in players_bets:
+        player['hands'] = [[]]  #clear hand
+        player['totals'] = [0]  #clear total
+        player['bet'] = 0  #clear bet
+
+#clear dealer
+def clear_dealer_hand(dealer_hand):
+    dealer_hand.clear()  #clear dealer hand
+
+#ask if players want to play again
+def play_again():
+    while True: #loop
+        choice = input("Do you want to play again? (yes/no): ").lower() #play again?
+        if choice == 'yes':
+            return True  #continue playing
+        elif choice == 'no':
+            print("Thanks for playing!")
+            return False  #exit the game
+        else:
+            print("Invalid input. Please enter 'yes' or 'no'.") #error
+
+#place bets again for new round
+def place_bets(players_bets):
+    for player in players_bets: #loop for all players
+        while True:
+            try:
+                bet = int(input(f"{player['name']}, how much would you like to bet? (Available bankroll: ${player['bankroll']}): ")) #new bet
+                if bet > player['bankroll']: #cannot be more than bankroll
+                    print(f"You cannot bet more than your bankroll of ${player['bankroll']}.")
+                elif bet <= 0: #cannot be negative
+                    print("Bet must be a positive amount.")
+                else:
+                    player['bet'] = bet  #update the player's bet
+                    player['bankroll'] -= bet  #subtract the bet from bankroll
+                    player['bets'] = [bet]  #start bet list again
+                    print(f"{player['name']}'s new bet: ${bet}. Remaining bankroll: ${player['bankroll']}.") #disply new bets
+                    break
+            except ValueError:
+                print("Invalid input. Please enter a valid bet amount.") #error
+
+def main(players_bets):
+    place_bets(players_bets) #place bets
+    deal_cards(players_bets) #deal cards
+    deal_dealer_card(dealer_hand) #deal first dealer card
+    insurance() #insurance
+    double(players_bets) #double down
+    check_split(players_bets) #see if player can split
+    hit_stand_surrender(players_bets) #options
+    dealer_total = dealer_play(dealer_hand) #dealers hand
+    payout(players_bets, dealer_total) #payout
+    clear_hands_and_totals(players_bets) #clear hands and totals fro players
+    clear_dealer_hand(dealer_hand) #clear dealer
+    if play_again(): #if they weant to play again
+        main(players_bets)  #call main with old bankrolls and players
+
+if __name__ == "__main__":
+    players_bets = get_players_bets() #place bets
+    main(players_bets)  #start
